@@ -1,5 +1,5 @@
 import { spawn } from 'child_process';
-import { writeFileSync } from 'fs';
+import { readFileSync, existsSync } from 'fs';
 import { NextResponse } from 'next/server';
 
 const runningCertbots = new Map();
@@ -7,12 +7,14 @@ const runningCertbots = new Map();
 export async function POST(req) {
   const { domain, email } = await req.json();
 
+  console.log(`🚀 Starting Certbot for domain: ${domain}, email: ${email}`);
+
   const certbot = spawn('certbot', [
     'certonly',
     '--manual',
     '--preferred-challenges', 'dns',
-    '--manual-auth-hook', '/absolute/path/to/save-txt-hook.sh',
-    '--manual-cleanup-hook', '/absolute/path/to/delete-txt-hook.sh',
+    '--manual-auth-hook', '/opt/certbot-hooks/save-txt-hook.sh', // update with your actual path
+    '--manual-cleanup-hook', '/opt/certbot-hooks/delete-txt-hook.sh', // update with your actual path
     '--non-interactive',
     '--agree-tos',
     '--manual-public-ip-logging-ok',
@@ -20,17 +22,39 @@ export async function POST(req) {
     '-d', domain
   ]);
 
-  // Track the process so we can resume later
   runningCertbots.set(domain, certbot);
 
-  // Wait a few seconds to read challenge from file
-  await new Promise(resolve => setTimeout(resolve, 5000));
+  // 🔧 Log stdout from Certbot
+  certbot.stdout.on('data', (data) => {
+    console.log(`[Certbot stdout] ${data.toString()}`);
+  });
 
-  let txtValue;
-  try {
-    txtValue = require('fs').readFileSync(`/tmp/certbot-dns-challenge-${domain}`, 'utf8').trim();
-  } catch (e) {
-    return NextResponse.json({ success: false, error: 'Failed to generate TXT record.' });
+  // ❗ Log stderr from Certbot
+  certbot.stderr.on('data', (data) => {
+    console.error(`[Certbot stderr] ${data.toString()}`);
+  });
+
+  // ⏱ Wait for the challenge file to be written (with retry)
+  let txtValue = null;
+  const challengePath = `/tmp/certbot-dns-challenge-${domain}`;
+  console.log(`⏳ Waiting for TXT challenge file: ${challengePath}`);
+
+  for (let i = 0; i < 10; i++) {
+    if (existsSync(challengePath)) {
+      try {
+        txtValue = readFileSync(challengePath, 'utf8').trim();
+        console.log(`✅ TXT record found: ${txtValue}`);
+        break;
+      } catch (readErr) {
+        console.error(`❌ Failed to read challenge file: ${readErr.message}`);
+      }
+    }
+    await new Promise((r) => setTimeout(r, 2000)); // Wait 2 seconds
+  }
+
+  if (!txtValue) {
+    console.error('❌ TXT challenge file not found after timeout.');
+    return NextResponse.json({ success: false, error: 'Failed to generate TXT record. File not created.' });
   }
 
   return NextResponse.json({
