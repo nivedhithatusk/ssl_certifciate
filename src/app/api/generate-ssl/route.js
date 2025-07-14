@@ -1,28 +1,40 @@
-// src/app/api/generate-ssl/route.js
+import { spawn } from 'child_process';
+import { writeFileSync } from 'fs';
+import { NextResponse } from 'next/server';
 
-import { NextResponse } from "next/server";
+const runningCertbots = new Map();
 
-export async function POST(request) {
+export async function POST(req) {
+  const { domain, email } = await req.json();
+
+  const certbot = spawn('certbot', [
+    'certonly',
+    '--manual',
+    '--preferred-challenges', 'dns',
+    '--manual-auth-hook', '/absolute/path/to/save-txt-hook.sh',
+    '--manual-cleanup-hook', '/absolute/path/to/delete-txt-hook.sh',
+    '--non-interactive',
+    '--agree-tos',
+    '--manual-public-ip-logging-ok',
+    '--email', email,
+    '-d', domain
+  ]);
+
+  // Track the process so we can resume later
+  runningCertbots.set(domain, certbot);
+
+  // Wait a few seconds to read challenge from file
+  await new Promise(resolve => setTimeout(resolve, 5000));
+
+  let txtValue;
   try {
-    const { domain, email } = await request.json();
-
-    if (!domain || !email) {
-      return NextResponse.json(
-        { success: false, error: "Domain and Email are required" },
-        { status: 400 }
-      );
-    }
-
-    // For example: generate a fake TXT record (replace with real logic)
-    // In real case, generate DNS challenge TXT record using certbot --manual or acme lib
-    const txtRecord = `_acme-challenge.${domain} 300 IN TXT "fake-txt-challenge-token"`;
-
-    // Return the TXT record string to the frontend
-    return NextResponse.json({ success: true, txtRecord });
-  } catch (error) {
-    return NextResponse.json(
-      { success: false, error: error.message || "Unknown error" },
-      { status: 500 }
-    );
+    txtValue = require('fs').readFileSync(`/tmp/certbot-dns-challenge-${domain}`, 'utf8').trim();
+  } catch (e) {
+    return NextResponse.json({ success: false, error: 'Failed to generate TXT record.' });
   }
+
+  return NextResponse.json({
+    success: true,
+    txtRecord: `_acme-challenge.${domain} 300 IN TXT "${txtValue}"`
+  });
 }
