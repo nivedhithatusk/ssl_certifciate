@@ -1,108 +1,50 @@
-// src/app/page.js
 "use client";
-
 import { useState } from "react";
 
-export default function Home() {
+export default function Page() {
   const [domain, setDomain] = useState("");
   const [email, setEmail] = useState("");
-  const [message, setMessage] = useState("");
   const [txtRecord, setTxtRecord] = useState("");
-  const [loading, setLoading] = useState(false);
+  const [message, setMessage] = useState("");
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    setLoading(true);
-    setMessage("Generating DNS TXT record...");
-
-    const response = await fetch("/api/generate-ssl", {
+  const generate = async () => {
+    setMessage("Generating DNS challenge...");
+    const res = await fetch("/api/generate-ssl", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ domain, email }),
+      body: JSON.stringify({ domain, email })
     });
-
-    const data = await response.json();
-
-    if (data.success) {
-      setMessage("DNS TXT record generated successfully!");
-      setTxtRecord(data.txtRecord);
-    } else {
-      setMessage("Error generating DNS TXT record: " + data.error);
-    }
-    setLoading(false);
+    const data = await res.json();
+    setMessage(data.error || "Add TXT record to DNS then click Verify");
+    setTxtRecord(data.txtRecord || "");
   };
 
-  const handleVerify = async () => {
-    setLoading(true);
-    setMessage("Verifying DNS TXT record and generating SSL...");
-
-    const response = await fetch("/api/verify-and-generate", {
+  const verify = async () => {
+    setMessage("Verifying and issuing...");
+    const res = await fetch("/api/verify-and-generate", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ domain }),
+      body: JSON.stringify({ domain, email })
     });
-
-    const data = await response.json();
-
-    if (data.success) {
-      setMessage("SSL certificate generated successfully!");
-    } else {
-      setMessage("Error: " + data.error);
-    }
-    setLoading(false);
+    const data = await res.json();
+    setMessage(data.error || "✅ Certificate issued!");
   };
 
   return (
-    <div style={{ padding: 20, maxWidth: 600, margin: "auto" }}>
+    <div>
       <h1>SSL Certificate Generator</h1>
-
-      <form onSubmit={handleSubmit} style={{ marginBottom: 20 }}>
-        <div>
-          <label>Domain:</label>
-          <input
-            type="text"
-            value={domain}
-            onChange={(e) => setDomain(e.target.value)}
-            required
-            style={{ width: "100%", marginBottom: 10 }}
-          />
-        </div>
-        <div>
-          <label>Email:</label>
-          <input
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            required
-            style={{ width: "100%", marginBottom: 10 }}
-          />
-        </div>
-        <button type="submit" disabled={loading}>
-          {loading ? "Generating..." : "Generate TXT Record"}
-        </button>
-      </form>
-
-      {message && <p>{message}</p>}
+      <input placeholder="domain.com" value={domain} onChange={e => setDomain(e.target.value)} />
+      <input placeholder="email@example.com" value={email} onChange={e => setEmail(e.target.value)} />
+      <button onClick={generate}>Generate TXT</button>
 
       {txtRecord && (
-        <div>
-          <h3>DNS TXT Record</h3>
-          <pre
-            style={{
-              backgroundColor: "#eee",
-              padding: 10,
-              borderRadius: 4,
-              overflowX: "auto",
-            }}
-          >
-            {txtRecord}
-          </pre>
-          <p>Please add this TXT record to your DNS provider.</p>
-          <button onClick={handleVerify} disabled={loading}>
-            {loading ? "Verifying..." : "Verify DNS Record and Generate SSL"}
-          </button>
-        </div>
+        <>
+          <pre>{txtRecord}</pre>
+          <button onClick={verify}>Verify & Issue</button>
+        </>
       )}
+
+      {message && <p>{message}</p>}
     </div>
   );
 }

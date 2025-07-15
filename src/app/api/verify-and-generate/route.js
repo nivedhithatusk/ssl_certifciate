@@ -1,37 +1,36 @@
-// app/api/verify-and-generate.js
-import { spawn } from 'child_process';
-import { NextResponse } from 'next/server';
-import { existsSync } from 'fs';
-import path from 'path';
+import { spawn } from "child_process";
+import { NextResponse } from "next/server";
 
 export async function POST(req) {
-  const { domain } = await req.json();
-  const cmd = `${process.env.HOME}/.acme.sh/acme.sh`;
-  const args = ['--renew', '--dns', '--domain', domain];
+  const { domain, email } = await req.json();
 
   return new Promise(resolve => {
-    const acme = spawn(cmd, args);
-    let output = '';
+    const certbot = spawn("certbot", [
+      "certonly",
+      "--manual",
+      "--preferred-challenges",
+      "dns",
+      "--manual-auth-hook",
+      "/bin/true",
+      "--manual-cleanup-hook",
+      "/absolute/path/to/scripts/delete-txt-hook.sh",
+      "--non-interactive",
+      "--agree-tos",
+      "--email",
+      email,
+      "-d",
+      domain
+    ]);
 
-    acme.stdout.on('data', d => (output += d));
-    acme.stderr.on('data', d => (output += d));
+    let log = "";
+    certbot.stdout.on("data", data => (log += data));
+    certbot.stderr.on("data", data => (log += data));
 
-    acme.on('close', () => {
-      const dir = `${process.env.HOME}/.acme.sh/${domain}`;
-      const certPath = path.join(dir, `${domain}.cer`);
-      const keyPath = path.join(dir, `${domain}.key`);
-      const fullPath = path.join(dir, `fullchain.cer`);
-
-      if (output.includes('Your cert is in') && existsSync(certPath) && existsSync(keyPath)) {
-        resolve(NextResponse.json({ 
-          success: true,
-          certPath, keyPath, fullPath
-        }));
+    certbot.on("close", code => {
+      if (code === 0) {
+        resolve(NextResponse.json({ success: true }));
       } else {
-        resolve(NextResponse.json({
-          success: false,
-          error: 'Certificate issuance failed. Check DNS propagation and try again.'
-        }));
+        resolve(NextResponse.json({ success: false, error: log }));
       }
     });
   });
