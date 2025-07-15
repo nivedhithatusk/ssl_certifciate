@@ -1,36 +1,38 @@
-import { spawn } from "child_process";
-import { existsSync } from "fs";
-import path from "path";
-import { NextResponse } from "next/server";
+import { spawn } from 'child_process';
+import path from 'path';
 
 export async function POST(req) {
-  const { domain } = await req.json();
-  const cmd = "/root/.acme.sh/acme.sh";
-  const args = ["--renew", "--dns", "--domain", domain];
+  const { domain, email } = await req.json();
 
-  const acme = spawn(cmd, args);
-  let output = "";
+  const acmeCmd = spawn(
+    path.join(process.env.HOME, '.acme.sh/acme.sh'),
+    [
+      '--renew',
+      '-d', domain,
+      '--yes',
+      '--debug',
+      '--log'
+    ]
+  );
 
-  for await (const chunk of acme.stdout) output += chunk;
-  for await (const chunk of acme.stderr) output += chunk;
+  let stderr = '';
+
+  acmeCmd.stderr.on('data', (data) => {
+    stderr += data.toString();
+  });
 
   return new Promise((resolve) => {
-    acme.on("close", (code) => {
-      const dir = path.join(process.env.HOME, ".acme.sh", domain);
-      const cert = path.join(dir, `${domain}.cer`);
-      const key = path.join(dir, `${domain}.key`);
-      if (code === 0 && existsSync(cert) && existsSync(key)) {
-        resolve(NextResponse.json({
+    acmeCmd.on('close', (code) => {
+      if (code === 0) {
+        resolve(new Response(JSON.stringify({
           success: true,
-          certPath: cert,
-          keyPath: key,
-          fullchain: path.join(dir, "fullchain.cer")
-        }));
+          message: 'SSL certificate issued successfully.'
+        }), { status: 200 }));
       } else {
-        resolve(NextResponse.json({
+        resolve(new Response(JSON.stringify({
           success: false,
-          error: "Issuance failed. DNS may not have propagated."
-        }));
+          error: `Acme.sh exited code ${code}. stderr: ${stderr}`
+        }), { status: 500 }));
       }
     });
   });
