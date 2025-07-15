@@ -1,37 +1,35 @@
+// app/api/generate-ssl.js
 import { spawn } from 'child_process';
-import { readFile } from 'fs/promises';
 import { NextResponse } from 'next/server';
-import path from 'path';
 
 export async function POST(req) {
   const { domain, email } = await req.json();
-  const challengeFile = path.join('/tmp', `certbot-dns-challenge-${domain}`);
 
-  const certbot = spawn('certbot', [
-    'certonly',
-    '--manual',
-    '--preferred-challenges', 'dns',
-    '--manual-auth-hook', path.resolve('./scripts/save-txt-hook.sh'),
-    '--manual-cleanup-hook', path.resolve('./scripts/delete-txt-hook.sh'),
-    '--non-interactive',
-    '--manual-public-ip-logging-ok',
-    '--agree-tos',
-    '--email', email,
-    '-d', domain
-  ]);
+  const cmd = `${process.env.HOME}/.acme.sh/acme.sh`;
+  const args = [
+    '--issue',
+    '--dns',
+    '--yes-I-know-dns-manual',
+    '--domain', domain,
+    '--accountemail', email,
+    '--createDNSRecord'
+  ];
 
-  await new Promise((resolve) => setTimeout(resolve, 8000));
+  return new Promise(resolve => {
+    const acme = spawn(cmd, args);
+    let output = '';
 
-  try {
-    const txtValue = await readFile(challengeFile, 'utf8');
-    return NextResponse.json({
-      success: true,
-      txtRecord: `_acme-challenge.${domain} 300 IN TXT "${txtValue.trim()}"`
+    acme.stdout.on('data', data => (output += data));
+    acme.stderr.on('data', data => (output += data));
+
+    acme.on('close', () => {
+      const match = output.match(/_acme-challenge\..+\s+TXT\s+"([^"]+)"/);
+      if (!match) return resolve(NextResponse.json({ success: false, error: 'Could not parse TXT' }));
+
+      resolve(NextResponse.json({
+        success: true,
+        txtRecord: `_acme-challenge.${domain} TXT "${match[1]}"`
+      }));
     });
-  } catch (err) {
-    return NextResponse.json({
-      success: false,
-      error: `TXT record not found. ${err.message}`
-    });
-  }
+  });
 }
