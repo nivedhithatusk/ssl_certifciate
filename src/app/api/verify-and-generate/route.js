@@ -5,7 +5,7 @@ import { NextResponse } from "next/server";
 
 export async function POST(req) {
   const { domain } = await req.json();
-  const cmd = `${process.env.HOME}/.acme.sh/acme.sh`;
+  const cmd = "/root/.acme.sh/acme.sh";
   const args = ["--renew", "--dns", "--domain", domain];
 
   const acme = spawn(cmd, args);

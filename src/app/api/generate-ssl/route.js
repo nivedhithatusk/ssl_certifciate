@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 
 export async function POST(req) {
   const { domain, email } = await req.json();
-  const cmd = `${process.env.HOME}/.acme.sh/acme.sh`;
+  const cmd = "/root/.acme.sh/acme.sh";
   const args = [
     "--issue",
     "--dns",
