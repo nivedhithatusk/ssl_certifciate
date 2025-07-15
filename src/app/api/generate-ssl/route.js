@@ -1,45 +1,37 @@
 import { spawn } from "child_process";
-import { readFile, unlink } from "fs/promises";
 import { NextResponse } from "next/server";
 
 export async function POST(req) {
   const { domain, email } = await req.json();
-  const challengeFile = `/tmp/certbot-dns-challenge-${domain}`;
+  const cmd = `${process.env.HOME}/.acme.sh/acme.sh`;
+  const args = [
+    "--issue",
+    "--dns",
+    "-d", domain,
+    "--yes-I-know-dns-manual-mode-enough-go-ahead-please",
+    "--accountemail", email
+  ];
 
-  // Clean previous file
-  await unlink(challengeFile).catch(() => {});
+  const acme = spawn(cmd, args);
+  let output = "";
 
-  const certbot = spawn("certbot", [
-    "certonly",
-    "--manual",
-    "--preferred-challenges",
-    "dns",
-    "--manual-auth-hook",
-    "/absolute/path/to/scripts/save-txt-hook.sh",
-    "--manual-cleanup-hook",
-    "/absolute/path/to/scripts/delete-txt-hook.sh",
-    "--non-interactive",
-    "--agree-tos",
-    "--email",
-    email,
-    "-d",
-    domain
-  ]);
+  for await (const chunk of acme.stdout) output += chunk;
+  for await (const chunk of acme.stderr) output += chunk;
 
-  // Give Certbot time to run hook
-  await new Promise(r => setTimeout(r, 10000));
-  certbot.kill();
+  return new Promise((resolve) => {
+    acme.on("close", () => {
+      const matches = [...output.matchAll(/Domain:(.+)[\\r]?\\nTxt value:(.+)/gi)];
+      if (!matches.length) {
+        return resolve(NextResponse.json({ success: false, error: "Failed to parse challenge." }));
+      }
 
-  try {
-    const token = (await readFile(challengeFile, "utf8")).trim();
-    return NextResponse.json({
-      success: true,
-      txtRecord: `_acme-challenge.${domain} 300 IN TXT "${token}"`
+      const records = matches.map(([, d, t]) => ({
+        domain: d.trim(),
+        token: t.trim(),
+        record: `_acme-challenge.${d.trim()} TXT "${t.trim()}"`
+      }));
+
+      resolve(NextResponse.json({ success: true, records }));
     });
-  } catch (err) {
-    return NextResponse.json({
-      success: false,
-      error: "TXT record not found—make sure save-txt-hook fired."
-    });
-  }
+  });
 }
