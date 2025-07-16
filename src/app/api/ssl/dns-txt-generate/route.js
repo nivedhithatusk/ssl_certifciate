@@ -1,22 +1,17 @@
-// pages/api/ssl/dns-txt-generate.js
-
 import { exec } from 'child_process';
 import fs from 'fs/promises';
 
-export async function POST(req, res) {
+export async function POST(req) {
   const body = await req.json();
-
   const { domain, email } = body;
 
   try {
-    // Run Certbot in dry run mode to capture the challenge
     await runCertbotChallenge(domain, email);
 
     const txtValue = (await fs.readFile('/tmp/validation', 'utf8')).trim();
     const dnsDomain = (await fs.readFile('/tmp/domain', 'utf8')).trim();
     const challengeId = Date.now().toString();
 
-    // Save challenge to a file
     const data = {
       dnsDomain,
       txtValue,
@@ -26,13 +21,19 @@ export async function POST(req, res) {
     };
     await fs.writeFile(`/tmp/challenge-${challengeId}.json`, JSON.stringify(data));
 
-    res.status(200).json({
-      challengeId,
-      dnsName: `_acme-challenge.${domain}`,
-      dnsValue: txtValue,
-    });
+    return new Response(
+      JSON.stringify({
+        challengeId,
+        dnsName: `_acme-challenge.${domain}`,
+        dnsValue: txtValue,
+      }),
+      { status: 200, headers: { 'Content-Type': 'application/json' } }
+    );
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    return new Response(JSON.stringify({ error: error.message }), {
+      status: 500,
+      headers: { 'Content-Type': 'application/json' },
+    });
   }
 }
 
