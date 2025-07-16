@@ -11,7 +11,7 @@ export default function SSLPage() {
     const res = await fetch('/api/ssl/dns-txt-generate', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ domain: 'example.com', email: 'user@example.com' }),
+      body: JSON.stringify({ domain: 'testingdemo.life', email: 'nivedhitha@tuskmelon.com' }),
     });
     const data = await res.json();
     setChallengeId(data.challengeId);
