@@ -3,10 +3,10 @@
 import { exec } from 'child_process';
 import fs from 'fs/promises';
 
-export default async function handler(req, res) {
-  if (req.method !== 'POST') return res.status(405).end();
+export async function POST(req) {
+  const body = await req.json();
 
-  const { domain, email } = req.body;
+  const { domain, email } = body;
 
   try {
     // Run Certbot in dry run mode to capture the challenge

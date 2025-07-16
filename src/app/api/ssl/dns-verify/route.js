@@ -3,10 +3,10 @@
 import dns from 'dns/promises';
 import fs from 'fs/promises';
 
-export default async function handler(req, res) {
-  if (req.method !== 'POST') return res.status(405).end();
+export async function POST(req) {
+  const body = await req.json();
 
-  const { challengeId } = req.body;
+  const { challengeId } = body;
 
   try {
     const data = JSON.parse(await fs.readFile(`/tmp/challenge-${challengeId}.json`, 'utf8'));
