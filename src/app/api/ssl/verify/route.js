@@ -1,9 +1,8 @@
-// src/app/api/ssl/verify/route.js
-import dns from 'dns';
-import { exec } from 'child_process';
-import { NextResponse } from 'next/server';
+import { exec } from "child_process";
+import dns from "dns";
+import fs from "fs";
+import { NextResponse } from "next/server";
 
-// Helper to run exec as a promise
 function execPromise(cmd) {
   return new Promise((resolve, reject) => {
     exec(cmd, (error, stdout, stderr) => {
@@ -16,7 +15,6 @@ function execPromise(cmd) {
   });
 }
 
-// Helper to run DNS TXT lookup as a promise
 function resolveTxtPromise(hostname) {
   return new Promise((resolve, reject) => {
     dns.resolveTxt(hostname, (err, records) => {
@@ -29,16 +27,8 @@ function resolveTxtPromise(hostname) {
 export async function POST(req) {
   try {
     const body = await req.json();
-    const { domain, expectedValue } = body;
-
-    if (!domain || !expectedValue) {
-      return NextResponse.json({ message: 'Domain and expectedValue required' }, { status: 400 });
-    }
-
-    const records = await resolveTxtPromise(`_acme-challenge.${domain}`);
-    if (!records.includes(expectedValue)) {
-      return NextResponse.json({ message: 'DNS record does not match yet' }, { status: 400 });
-    }
+    const { domain } = body;
+    if (!domain) return NextResponse.json({ message: "Domain required" }, { status: 400 });
 
     const cmd = `certbot certonly --manual --preferred-challenges dns \
       --manual-auth-hook /home/ubuntu/auth-hook.sh \
@@ -50,16 +40,25 @@ export async function POST(req) {
 
     await execPromise(cmd);
 
-    return NextResponse.json({
-      message: 'Certificate issued successfully!',
-      certPath: `/etc/letsencrypt/live/${domain}/fullchain.pem`,
-      keyPath: `/etc/letsencrypt/live/${domain}/privkey.pem`
-    });
+    // Read the token after Certbot runs auth-hook
+    const content = fs.readFileSync("/tmp/certbot_dns_data.txt", "utf8");
+    const match = content.match(/CERTBOT_VALIDATION=(.*)/);
+    const token = match ? match[1].trim() : null;
 
+    if (!token) return NextResponse.json({ message: "Token not found in hook output" }, { status: 500 });
+
+    // Check DNS record
+    const records = await resolveTxtPromise(`_acme-challenge.${domain}`);
+    if (!records.includes(token)) {
+      return NextResponse.json({ message: "DNS record does not match yet" }, { status: 400 });
+    }
+
+    return NextResponse.json({
+      message: "✅ Certificate issued successfully!",
+      certPath: `/etc/letsencrypt/live/${domain}/fullchain.pem`,
+      keyPath: `/etc/letsencrypt/live/${domain}/privkey.pem`,
+    });
   } catch (error) {
-    return NextResponse.json(
-      { message: 'Verification failed', error: error.toString() },
-      { status: 500 }
-    );
+    return NextResponse.json({ message: "Verification failed", error: error.toString() }, { status: 500 });
   }
 }
