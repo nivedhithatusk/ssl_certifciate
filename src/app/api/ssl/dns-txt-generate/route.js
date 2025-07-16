@@ -3,7 +3,7 @@
 import { exec } from 'child_process';
 import fs from 'fs/promises';
 
-export async function POST(req) {
+export async function POST(req, res) {
   const body = await req.json();
 
   const { domain, email } = body;

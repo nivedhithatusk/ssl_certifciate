@@ -3,7 +3,7 @@
 import dns from 'dns/promises';
 import fs from 'fs/promises';
 
-export async function POST(req) {
+export async function POST(req, res) {
   const body = await req.json();
 
   const { challengeId } = body;

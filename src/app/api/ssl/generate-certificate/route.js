@@ -3,7 +3,7 @@
 import fs from 'fs/promises';
 import { exec } from 'child_process';
 
-export async function POST(req) {
+export async function POST(req, res) {
   const body = await req.json();
 
   const { challengeId } = body;
