@@ -7,17 +7,24 @@ export default function SSLPage() {
   const [challengeId, setChallengeId] = useState('');
   const [dnsData, setDnsData] = useState({});
 
-  async function handleGenerate() {
-    const res = await fetch('/api/ssl/dns-txt-generate', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ domain: 'testingdemo.life', email: 'nivedhitha@tuskmelon.com' }),
-    });
-    const data = await res.json();
-    setChallengeId(data.challengeId);
-    setDnsData(data);
-    setStep(2);
+async function handleGenerate() {
+  const res = await fetch('/api/ssl/dns-txt-generate', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ domain: 'testingdemo.life', email: 'nivedhitha@tuskmelon.com' }),
+  });
+
+  if (!res.ok) {
+    const error = await res.json();
+    alert("Failed to generate DNS record: " + error.error);
+    return;
   }
+
+  const data = await res.json();
+  setChallengeId(data.challengeId);
+  setDnsData(data);
+  setStep(2);
+}
 
   async function handleVerify() {
     const res = await fetch('/api/ssl/dns-verify', {
